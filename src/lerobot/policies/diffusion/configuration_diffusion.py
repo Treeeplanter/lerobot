@@ -123,17 +123,17 @@ class DiffusionConfig(PreTrainedConfig):
     # Architecture / modeling.
     # Vision backbone.
     vision_backbone: str = "resnet18"
-    crop_shape: tuple[int, int] | None = (84, 84)
+    crop_shape: tuple[int, int] = (224, 224)
     crop_is_random: bool = True
     pretrained_backbone_weights: str | None = None
     use_group_norm: bool = True
     spatial_softmax_num_keypoints: int = 32
     use_separate_rgb_encoder_per_camera: bool = False
     # Unet.
-    down_dims: tuple[int, ...] = (512, 1024, 2048)
+    down_dims: tuple[int, ...] = (256, 512, 1024)
     kernel_size: int = 5
     n_groups: int = 8
-    diffusion_step_embed_dim: int = 128
+    diffusion_step_embed_dim: int = 256
     use_film_scale_modulation: bool = True
     # Noise scheduler.
     noise_scheduler_type: str = "DDPM"
