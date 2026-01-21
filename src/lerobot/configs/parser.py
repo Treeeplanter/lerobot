@@ -16,6 +16,7 @@ import inspect
 import pkgutil
 import sys
 from argparse import ArgumentError
+from ast import literal_eval
 from collections.abc import Callable, Iterable, Sequence
 from functools import wraps
 from pathlib import Path
@@ -94,6 +95,17 @@ def parse_plugin_args(plugin_arg_suffix: str, args: Sequence[str]) -> dict[str, 
                 key = key[2:]
             plugin_args[key] = value
     return plugin_args
+
+
+def _parse_list_arg(value: str) -> list[str] | None:
+    raw = value.strip()
+    try:
+        parsed_value = literal_eval(raw)
+    except (ValueError, SyntaxError):
+        parsed_value = None
+    if isinstance(parsed_value, (list, tuple)):
+        return [str(item) for item in parsed_value] or None
+    return [item.strip() for item in raw.split(",") if item.strip()] or None
 
 
 class PluginLoadError(Exception):
@@ -213,6 +225,12 @@ def wrap(config_path: Path | None = None) -> Callable[[F], F]:
                 args = args[1:]
             else:
                 cli_args = sys.argv[1:]
+                repo_ids_arg = parse_arg("dataset.repo_ids", cli_args)
+                if repo_ids_arg is not None:
+                    cli_args = filter_arg("dataset.repo_ids", cli_args)
+                    parsed_repo_ids = _parse_list_arg(repo_ids_arg)
+                    if parsed_repo_ids and not parse_arg("dataset.repo_id", cli_args):
+                        cli_args.append(f"--dataset.repo_id={parsed_repo_ids[0]}")
                 plugin_args = parse_plugin_args(PLUGIN_DISCOVERY_SUFFIX, cli_args)
                 for plugin_cli_arg, plugin_path in plugin_args.items():
                     try:
@@ -230,6 +248,10 @@ def wrap(config_path: Path | None = None) -> Callable[[F], F]:
                     cfg = argtype.from_pretrained(config_path_cli, cli_args=cli_args)
                 else:
                     cfg = draccus.parse(config_class=argtype, config_path=config_path, args=cli_args)
+                if repo_ids_arg is not None and hasattr(cfg, "dataset") and getattr(cfg, "dataset") is not None:
+                    parsed_repo_ids = _parse_list_arg(repo_ids_arg)
+                    if parsed_repo_ids is not None and hasattr(cfg.dataset, "repo_ids"):
+                        cfg.dataset.repo_ids = parsed_repo_ids
             response = fn(cfg, *args, **kwargs)
             return response
 

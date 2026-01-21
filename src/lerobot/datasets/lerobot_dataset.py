@@ -1598,7 +1598,7 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
         root: str | Path | None = None,
         episodes: dict | None = None,
         image_transforms: Callable | None = None,
-        delta_timestamps: dict[str, list[float]] | None = None,
+        delta_timestamps: dict[str, list[float]] | dict[str, dict[str, list[float]]] | None = None,
         tolerances_s: dict | None = None,
         download_videos: bool = True,
         video_backend: str | None = None,
@@ -1606,22 +1606,32 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
         super().__init__()
         self.repo_ids = repo_ids
         self.root = Path(root) if root else HF_LEROBOT_HOME
+        self.episodes = None
         self.tolerances_s = tolerances_s if tolerances_s else dict.fromkeys(repo_ids, 0.0001)
         # Construct the underlying datasets passing everything but `transform` and `delta_timestamps` which
         # are handled by this class.
-        self._datasets = [
-            LeRobotDataset(
-                repo_id,
-                root=self.root / repo_id,
-                episodes=episodes[repo_id] if episodes else None,
-                image_transforms=image_transforms,
-                delta_timestamps=delta_timestamps,
-                tolerance_s=self.tolerances_s[repo_id],
-                download_videos=download_videos,
-                video_backend=video_backend,
+        self._datasets = []
+        for repo_id in repo_ids:
+            if delta_timestamps is None:
+                repo_delta_timestamps = None
+            elif repo_id in delta_timestamps:
+                repo_delta_timestamps = delta_timestamps[repo_id]
+            else:
+                repo_delta_timestamps = delta_timestamps
+            self._datasets.append(
+                LeRobotDataset(
+                    repo_id,
+                    root=self.root / repo_id,
+                    episodes=episodes[repo_id] if episodes else None,
+                    image_transforms=image_transforms,
+                    delta_timestamps=repo_delta_timestamps,
+                    tolerance_s=self.tolerances_s[repo_id],
+                    download_videos=download_videos,
+                    video_backend=video_backend,
+                )
             )
-            for repo_id in repo_ids
-        ]
+
+        assert len(self._datasets) == len(self.repo_ids), "Number of datasets should match number of repo_ids."
 
         # Disable any data keys that are not common across all of the datasets. Note: we may relax this
         # restriction in future iterations of this class. For now, this is necessary at least for being able
@@ -1649,6 +1659,60 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
         # with multiple robots of different ranges. Instead we should have one normalization
         # per robot.
         self.stats = aggregate_stats([dataset.meta.stats for dataset in self._datasets])
+
+    @property
+    def meta(self):
+        """Return a combined metadata object for all underlying datasets.
+
+        Note: This is a simplified metadata object that only contains aggregated stats.
+        """
+        combined_meta = LeRobotDatasetMetadata.__new__(LeRobotDatasetMetadata)
+        combined_meta.repo_id = " + ".join(self.repo_ids)
+        combined_meta.root = self.root
+        combined_meta.info = {
+            "fps": self.fps,
+            "video": self.video,
+        }
+        combined_meta.info["features"] = {
+            k: v for k, v in self._datasets[0].meta.features.items() if k not in self.disabled_features
+        }
+        combined_meta.info["total_episodes"] = self.num_episodes
+        combined_meta.info["total_frames"] = self.num_frames
+        combined_meta.stats = self.stats
+        combined_meta.episodes = self._build_combined_episodes()
+
+        self._meta = combined_meta
+        return combined_meta
+
+    def _build_combined_episodes(self) -> datasets.Dataset | None:
+        episode_datasets = []
+        frame_offset = 0
+        episode_offset = 0
+        for dataset_idx, dataset in enumerate(self._datasets):
+            if dataset.meta.episodes is None:
+                continue
+
+            def add_offsets(batch):
+                if "dataset_from_index" in batch:
+                    batch["dataset_from_index"] = [
+                        v + frame_offset for v in batch["dataset_from_index"]
+                    ]
+                if "dataset_to_index" in batch:
+                    batch["dataset_to_index"] = [v + frame_offset for v in batch["dataset_to_index"]]
+                if "episode_index" in batch:
+                    batch["episode_index"] = [v + episode_offset for v in batch["episode_index"]]
+                batch_len = len(next(iter(batch.values()))) if batch else 0
+                batch["dataset_index"] = [dataset_idx] * batch_len
+                return batch
+
+            episode_datasets.append(dataset.meta.episodes.map(add_offsets, batched=True))
+            frame_offset += dataset.num_frames
+            episode_offset += dataset.num_episodes
+
+        if not episode_datasets:
+            return None
+        return datasets.concatenate_datasets(episode_datasets)
+
 
     @property
     def repo_id_to_index(self):

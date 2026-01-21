@@ -338,13 +338,14 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
         #     from pathlib import Path
         #     output_dir = Path(cfg.output_dir) / "batch_images"
         #     output_dir.mkdir(parents=True, exist_ok=True)
-        #     image_third_person = batch["observation.images.third_person"][0, 0].cpu().numpy().transpose(1, 2, 0) * 255.0
+        #     image_third_person = batch["observation.images.external"][0, 0].cpu().numpy().transpose(1, 2, 0) * 255.0
         #     image_third_person = Image.fromarray(image_third_person.astype(np.uint8))
-        #     image_third_person.save(output_dir / "third_person.png")
-        #     image_eye_in_hand = batch["observation.images.eye_in_hand"][0, 0].cpu().numpy().transpose(1, 2, 0) * 255.0
+        #     image_third_person.save(output_dir / "external.png")
+        #     image_eye_in_hand = batch["observation.images.wrist"][0, 0].cpu().numpy().transpose(1, 2, 0) * 255.0
         #     image_eye_in_hand = Image.fromarray(image_eye_in_hand.astype(np.uint8))
-        #     image_eye_in_hand.save(output_dir / "eye_in_hand.png")
+        #     image_eye_in_hand.save(output_dir / "wrist.png")
 
+        # import pdb; pdb.set_trace()
         batch: dict[str, Any] = preprocessor(batch)
         train_tracker.dataloading_s = time.perf_counter() - start_time
 

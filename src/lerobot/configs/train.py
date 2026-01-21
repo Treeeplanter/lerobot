@@ -52,7 +52,7 @@ class TrainPipelineConfig(HubMixin):
     seed: int | None = 1000
     # Number of workers for the dataloader.
     num_workers: int = 4
-    batch_size: int = 16
+    batch_size: int = 32
     steps: int = 200_000
     eval_freq: int = 20_000
     log_freq: int = 200
@@ -118,6 +118,8 @@ class TrainPipelineConfig(HubMixin):
 
         if isinstance(self.dataset.repo_id, list):
             raise NotImplementedError("LeRobotMultiDataset is not currently implemented.")
+        if self.dataset.repo_id is None and not self.dataset.repo_ids:
+            raise ValueError("Dataset is not configured. Please set `dataset.repo_id` or `dataset.repo_ids`.")
 
         if not self.use_policy_training_preset and (self.optimizer is None or self.scheduler is None):
             raise ValueError("Optimizer and Scheduler must be set when the policy presets are not used.")

@@ -1,0 +1,28 @@
+version: v2
+description: Lerobot training on beaker
+budget: ai2/prior
+tasks:
+- name: shuol_lerobot_train
+  image:
+    beaker: hqfang/molmoact2-lerobot0.4.2-torch2.7.0-cuda12.8
+  command: ['/bin/bash', '-c']
+  arguments:
+    - >
+      exit 1 # SHOULD BE OVERWRITTEN BY MANAGER SCRIPT
+  envVars:
+  - name: WANDB_API_KEY
+    secret: SHUOL_WANDB_API_KEY
+  result:
+    path: '/ignore_this/'
+  datasets:
+  - source:
+      weka: prior-default
+    mountPath: /weka/prior
+  resources:
+    gpuCount: 1
+    memory: 1B  # Request minimal memory to get 1/8th of available
+  context:
+    priority: normal
+    preemptible: true
+  constraints:
+    cluster: [ai2/saturn]  # Will be set by manager if needed

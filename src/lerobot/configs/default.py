@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ast import literal_eval
 from dataclasses import dataclass, field
 
 from lerobot.datasets.transforms import ImageTransformsConfig
@@ -26,7 +27,8 @@ class DatasetConfig:
     # keys common between the datasets are kept. Each dataset gets and additional transform that inserts the
     # "dataset_index" into the returned item. The index mapping is made according to the order in which the
     # datasets are provided.
-    repo_id: str
+    repo_id: str | None = None
+    repo_ids: list[str] | str | None = None
     # Root directory where the dataset will be stored (e.g. 'dataset/path').
     root: str | None = None
     episodes: list[int] | None = None
@@ -35,6 +37,23 @@ class DatasetConfig:
     use_imagenet_stats: bool = True
     video_backend: str = field(default_factory=get_safe_default_codec)
     streaming: bool = False
+
+    def __post_init__(self) -> None:
+        if isinstance(self.repo_ids, str):
+            raw = self.repo_ids.strip()
+            parsed_list: list[str] | None = None
+            try:
+                parsed_value = literal_eval(raw)
+            except (ValueError, SyntaxError):
+                parsed_value = None
+            if isinstance(parsed_value, (list, tuple)):
+                parsed_list = [str(item) for item in parsed_value]
+            else:
+                parsed_list = [item.strip() for item in raw.split(",") if item.strip()]
+            self.repo_ids = parsed_list or None
+        if self.repo_id is None and self.repo_ids:
+            # Use the first repo_id as the primary dataset identifier when multiple are provided.
+            self.repo_id = self.repo_ids[0]
 
 
 @dataclass

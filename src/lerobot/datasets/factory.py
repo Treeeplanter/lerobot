@@ -17,6 +17,7 @@ import logging
 from pprint import pformat
 
 import torch
+from tqdm import tqdm
 
 from lerobot.configs.policies import PreTrainedConfig
 from lerobot.configs.train import TrainPipelineConfig
@@ -84,7 +85,9 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
         ImageTransforms(cfg.dataset.image_transforms) if cfg.dataset.image_transforms.enable else None
     )
 
-    if isinstance(cfg.dataset.repo_id, str):
+    if cfg.dataset.repo_ids is None:
+        if cfg.dataset.repo_id is None:
+            raise ValueError("`dataset.repo_id` must be set when `dataset.repo_ids` is not provided.")
         ds_meta = LeRobotDatasetMetadata(
             cfg.dataset.repo_id, root=cfg.dataset.root, revision=cfg.dataset.revision
         )
@@ -110,11 +113,70 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
                 max_num_shards=cfg.num_workers,
             )
     else:
-        raise NotImplementedError("The MultiLeRobotDataset isn't supported for now.")
+        # raise NotImplementedError("The MultiLeRobotDataset isn't supported for now.")
+        # dataset = MultiLeRobotDataset(
+        #     cfg.dataset.repo_id,
+        #     # TODO(aliberts): add proper support for multi dataset
+        #     # delta_timestamps=delta_timestamps,
+        #     image_transforms=image_transforms,
+        #     video_backend=cfg.dataset.video_backend,
+        # )
+        # logging.info(
+        #     "Multiple datasets were provided. Applied the following index mapping to the provided datasets: "
+        #     f"{pformat(dataset.repo_id_to_index, indent=2)}"
+        # )
+
+        # Handle multiple datasets
+        assert cfg.dataset.repo_ids is not None, "`dataset.repo_ids` must be set for multiple datasets."
+        logging.info(f"Loading datasets from {cfg.dataset.repo_ids}")
+        repo_ids = cfg.dataset.repo_ids
+        
+        delta_timestamps_dict = {}
+        filtered_repo_ids = []
+        skipped_repo_ids = []
+        for repo_id in tqdm(repo_ids, desc="Processing datasets metadata"):
+            try:
+                ds_meta = LeRobotDatasetMetadata(
+                    repo_id, 
+                    root=cfg.dataset.root, 
+                    revision=cfg.dataset.revision,
+                )
+                delta_timestamps = resolve_delta_timestamps(cfg.policy, ds_meta)
+            except Exception as e:
+                logging.warning(
+                    "Skipping dataset %s because delta timestamps could not be loaded: %s",
+                    repo_id,
+                    e,
+                )
+                skipped_repo_ids.append(repo_id)
+                continue
+
+            if not delta_timestamps:
+                logging.warning(
+                    "Skipping dataset %s because no delta timestamps were returned.",
+                    repo_id,
+                )
+                skipped_repo_ids.append(repo_id)
+                continue
+
+            delta_timestamps_dict[repo_id] = delta_timestamps
+            filtered_repo_ids.append(repo_id)
+
+        if not filtered_repo_ids:
+            raise RuntimeError("No datasets left after filtering.")
+
+        if skipped_repo_ids:
+            logging.warning(
+                "Skipped %d dataset(s). First few: %s",
+                len(skipped_repo_ids),
+                skipped_repo_ids[:5],
+            )
+
         dataset = MultiLeRobotDataset(
-            cfg.dataset.repo_id,
-            # TODO(aliberts): add proper support for multi dataset
-            # delta_timestamps=delta_timestamps,
+            filtered_repo_ids,
+            root=cfg.dataset.root,
+            episodes=cfg.dataset.episodes,
+            delta_timestamps=delta_timestamps_dict,
             image_transforms=image_transforms,
             video_backend=cfg.dataset.video_backend,
         )
