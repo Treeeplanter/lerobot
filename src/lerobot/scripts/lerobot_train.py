@@ -331,22 +331,41 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
         batch = next(dl_iter)
 
         # visualize the batch, save the images
+        # import numpy as np
+        # from PIL import Image
         # if is_main_process:
-        #     # save the images to the output_dir
-        #     import numpy as np
-        #     from PIL import Image
-        #     from pathlib import Path
-        #     output_dir = Path(cfg.output_dir) / "batch_images"
-        #     output_dir.mkdir(parents=True, exist_ok=True)
-        #     image_third_person = batch["observation.images.external"][0, 0].cpu().numpy().transpose(1, 2, 0) * 255.0
-        #     image_third_person = Image.fromarray(image_third_person.astype(np.uint8))
-        #     image_third_person.save(output_dir / "external.png")
-        #     image_eye_in_hand = batch["observation.images.wrist"][0, 0].cpu().numpy().transpose(1, 2, 0) * 255.0
-        #     image_eye_in_hand = Image.fromarray(image_eye_in_hand.astype(np.uint8))
-        #     image_eye_in_hand.save(output_dir / "wrist.png")
+        #     img = batch["observation.images.left_camera"][0, 0]
+        #     print(f"Before preprocessor - left: min={img.min().item():.4f}, max={img.max().item():.4f}")
+        #     img = img.cpu().numpy()
+        #     img = img.transpose(1, 2, 0)*255
+        #     img = img.astype(np.uint8)
+        #     img = Image.fromarray(img)
+        #     img.save("left_camera.png")
+        #     img = batch["observation.images.right_camera"][0, 0]
+        #     print(f"Before preprocessor - right: min={img.min().item():.4f}, max={img.max().item():.4f}")
+        #     img = img.cpu().numpy()
+        #     img = img.transpose(1, 2, 0)*255
+        #     img = img.astype(np.uint8)
+        #     img = Image.fromarray(img)
+        #     img.save("right_camera.png")
+        #     img = batch["observation.images.hand_camera"][0, 0]
+        #     print(f"Before preprocessor - hand: min={img.min().item():.4f}, max={img.max().item():.4f}")    
+        #     img = img.cpu().numpy()
+        #     img = img.transpose(1, 2, 0)*255
+        #     img = img.astype(np.uint8)
+        #     img = Image.fromarray(img)
+        #     img.save("hand_camera.png")
 
-        # import pdb; pdb.set_trace()
-        batch: dict[str, Any] = preprocessor(batch)
+        batch = preprocessor(batch)
+
+        # if is_main_process:
+        #     img = batch["observation.images.left_camera"][0, 0]
+        #     print(f"After preprocessor - left: min={img.min().item():.4f}, max={img.max().item():.4f}")
+        #     img = batch["observation.images.right_camera"][0, 0]
+        #     print(f"After preprocessor - right: min={img.min().item():.4f}, max={img.max().item():.4f}")
+        #     img = batch["observation.images.hand_camera"][0, 0]
+        #     print(f"After preprocessor - hand: min={img.min().item():.4f}, max={img.max().item():.4f}")    
+
         train_tracker.dataloading_s = time.perf_counter() - start_time
 
         train_tracker, output_dict = update_policy(

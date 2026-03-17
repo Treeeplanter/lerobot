@@ -33,7 +33,9 @@ def cfg_to_group(cfg: TrainPipelineConfig, return_list: bool = False) -> list[st
         f"seed:{cfg.seed}",
     ]
     if cfg.dataset is not None:
-        lst.append(f"dataset:{cfg.dataset.repo_id}")
+        # Use only the last part of the path to keep name short (for WandB artifact name limit)
+        dataset_name = Path(cfg.dataset.repo_id).name if "/" in cfg.dataset.repo_id or "\\" in cfg.dataset.repo_id else cfg.dataset.repo_id
+        lst.append(f"dataset:{dataset_name}")
     if cfg.env is not None:
         lst.append(f"env:{cfg.env.type}")
     return lst if return_list else "-".join(lst)
@@ -77,13 +79,14 @@ class WandBLogger:
             if cfg.resume
             else None
         )
+        run_tags = [tag for tag in cfg_to_group(cfg, return_list=True) if len(tag) <= 64]
         wandb.init(
             id=wandb_run_id,
             project=self.cfg.project,
             entity=self.cfg.entity,
             name=self.job_name,
             notes=self.cfg.notes,
-            tags=cfg_to_group(cfg, return_list=True),
+            tags=run_tags,
             dir=self.log_dir,
             config=cfg.to_dict(),
             # TODO(rcadene): try set to True
